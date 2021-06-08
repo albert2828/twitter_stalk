@@ -1,0 +1,143 @@
+---
+title: "Me stalkee en Twitter"
+author: "Alberto Macías"
+date: "6/7/2021"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, include=FALSE, message = FALSE, warning = FALSE,
+                      fig.align='center')
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(gridExtra)
+
+library(tidytext)
+library(twitteR)
+library(tm)
+library(tokenizers)
+library(wordcloud)
+library(RColorBrewer)
+```
+
+A veces me stalkeo, para acordarme quién soy. Este ha sido uno de mis tuits más populares, desde hace ya casi cuatro años y, en cierta forma, sigo creyendo en eso. A lo que me refiero es que muchos acostumbramos compartir lo que sentimos o pensamos, de casi cualquier cosa, en redes sociales y, de vez en cuando, es buena idea revisar lo que escribimos para recordar quiénes hemos sido y evaluar cómo hemos cambiado. La etimología de "recordar" es algo como "volver a pasar por el corazón" y no sé ustedes, pero yo creo que de vez en cuando es bueno releer las angustias y los desamores, o el entusiasmo y la alegría, para saber dónde hemos estado y hacia dónde vamos. Ya lo dijo Heráclito, un hombre no escribe el mismo tuits dos veces, porque ya no es el mismo hombre ni el mismo tuit. O algo sobre ríos, ya no me acuerdo.
+
+Una vez planteada esta premisa, quedan dos alternativas: pasar un par de horas haciendo scroll en nuestro perfil de Twitter o pasar un par de horas escribiendo código y descubrir algunos datos interesantes. Dado que tengo que aprender sobre procesamiento del lenguaje natural en R y con eso de que "debemos ser productivos", he optado por la segunda.
+
+Para este texto, ocuparé la librería <em>twitterR\em> para descargar datos de mis últimos 1000 tuits publicados. Para poder hacer esto, es necesario tener una cuenta de desarrollador de twitter y crear una API con ella. Esto lo pueden hacer [aquí](https://developer.twitter.com/en), tendrán que llenar algunos datos y después de un día les llegará un correo con la autorización de su cuenta de desarrollador.
+
+```{r}
+tuits <- userTimeline("bhherto95",n=3200, includeRts = T) 
+tuits <- twListToDF(tuits)
+tuits_df <- tuits %>% filter(!isRetweet) %>%
+            select(text, favoriteCount, replyToSN, created, retweetCount)
+head(tuits_df)
+```
+Por alguna razón que no acabo de comprender, si no incluyo los retuits y luego los excluyo del daa frame solo puedo descargar 37 tuits
+
+
+- Distribución de favs y retuits  
+- Serie temporal de favs y retuits  
+- A qué usuarios menciono más  
+- Análisis de las palabras que más tuiteo  
+- Limpieza del corpus
+- Análisis de los tuits con más favs y retuits  
+
+```{r}
+tuits_df %>% ggplot(aes(x=favoriteCount))+
+            geom_histogram(binwidth = 1, color="black")+
+            theme_minimal()+
+            labs(title="Distribución de favs en tuits",
+                 x="Número de Favs",
+                 y="")
+```
+
+
+```{r}
+table(tuits_df$favoriteCount)
+```
+
+```{r}
+tuits_df[tuits_df$favoriteCount==86,]$text
+tuits_df[tuits_df$favoriteCount==48,]$text
+tuits_df[tuits_df$favoriteCount==18,]$text
+tuits_df[tuits_df$favoriteCount==17,]$text
+```
+
+```{r}
+tuits_df %>% ggplot(aes(x=retweetCount))+
+            geom_histogram(binwidth = 1, color="black")+
+            theme_minimal()+
+            labs(title="Distribución de retuits",
+                 x="Número de retuits",
+                 y="")
+```
+
+```{r}
+table(tuits_df$retweetCount)
+```
+
+```{r}
+tuits_df %>% mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(favs = sum(favoriteCount)) %>%
+            ggplot(aes(x=fecha, y=favs))+
+            geom_line()+
+            theme_light()+
+            labs(title = "Evolución del número de favs por día")
+```
+
+```{r}
+tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
+            mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(favs = sum(favoriteCount)) %>%
+            ggplot(aes(x=fecha, y=favs))+
+            geom_line()+
+            theme_light()+
+            labs(title="Evolución del número de favs por día en 2021")
+```
+
+```{r}
+tuits_df %>% mutate(dia = wday(created, label = TRUE)) %>%
+            group_by(dia) %>% 
+            summarise(favs = sum(favoriteCount)) %>%
+            ggplot(aes(x=dia, y=favs)) +
+            geom_bar(stat = "identity")+
+            theme_light()+
+            labs(title = "Favs por día de la semana ")
+```
+
+```{r}
+tuits_df %>% mutate(dia = wday(created, label = TRUE)) %>%
+            group_by(dia) %>% 
+            summarise(favs = mean(favoriteCount)) %>%
+            ggplot(aes(x=dia, y=favs)) +
+            geom_bar(stat = "identity")+
+            theme_light()+
+            labs(title = "Promedio de favs por día de la semana ")
+```
+
+```{r}
+tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"),"%H")) %>%
+            group_by(hora) %>%
+            summarise(favs=mean(favoriteCount))%>%
+            ggplot(aes(x=hora, y=favs))+
+            geom_point()+
+            theme_light()+
+            labs(title = "Promedio de favs por hora")
+```
+
+```{r}
+tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"),"%H"),
+                    dia_sem = wday(created, label = T)) %>%
+            group_by(hora, dia_sem) %>%
+            summarise(favs=mean(favoriteCount))%>%
+            ggplot(aes(x=hora, y=favs, color=dia_sem))+
+            geom_point()+
+            theme_light()+
+            labs(title = "Promedio de favs por hora")
+```
+
