@@ -34,15 +34,14 @@ Para este texto, ocuparé la librería <em>twitterR\em> para descargar datos de 
 tuits <- userTimeline("bhherto95",n=3200, includeRts = T) 
 tuits <- twListToDF(tuits)
 tuits_df <- tuits %>% filter(!isRetweet) %>%
-            select(text, favoriteCount, replyToSN, created, retweetCount)
-head(tuits_df)
+            select(text, favoriteCount, replyToSN, id, created, retweetCount)
+tuits_df$created <- with_tz(tuits_df$created, "America/Mexico_City")
 ```
-Por alguna razón que no acabo de comprender, si no incluyo los retuits y luego los excluyo del daa frame solo puedo descargar 37 tuits
+Por alguna razón que no acabo de comprender, si no incluyo los retuits y luego los excluyo del data frame solo puedo descargar 37 tuits
 
 
 - Distribución de favs y retuits  
 - Serie temporal de favs y retuits  
-- A qué usuarios menciono más  
 - Análisis de las palabras que más tuiteo  
 - Limpieza del corpus
 - Análisis de los tuits con más favs y retuits  
@@ -58,6 +57,7 @@ tuits_df %>% ggplot(aes(x=favoriteCount))+
 
 
 ```{r}
+summary(tuits_df$favoriteCount)
 table(tuits_df$favoriteCount)
 ```
 
@@ -78,8 +78,48 @@ tuits_df %>% ggplot(aes(x=retweetCount))+
 ```
 
 ```{r}
+summary(tuits_df$retweetCount)
 table(tuits_df$retweetCount)
 ```
+
+```{r}
+tuits_df <- tuits_df %>% filter(favoriteCount<20)
+```
+
+
+```{r}
+tuits_df %>% mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(tuits = n()) %>%
+            ggplot(aes(x=fecha, y=tuits))+
+            geom_line()+
+            theme_light()+
+            labs(title = "Número de tuits por día",
+                 x="",
+                 y="")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+tuits_df %>% mutate(fecha=as.Date(created)) %>%
+            filter(fecha >= as.Date("2020-03-01") & fecha <= as.Date("2020-05-01"))%>%
+            group_by(fecha) %>% summarise(tuits = n()) %>%
+            ggplot(aes(x=fecha, y=tuits))+
+            geom_line()+
+            theme_light()+
+            labs(title = "Número de tuits por día: marzo a mayo 2020",
+                 x="",
+                 y="")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "2 day")+
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+tuits_df %>% mutate(fecha=as.Date(created)) %>%
+            filter(fecha== as.Date("2020-03-30") ) %>%
+            select(text, replyToSN)
+```
+
 
 ```{r}
 tuits_df %>% mutate(fecha=as.Date(created)) %>% 
@@ -98,6 +138,16 @@ tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
             geom_line()+
             theme_light()+
             labs(title="Evolución del número de favs por día en 2021")
+```
+
+```{r}
+tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
+            mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(tuits = n()) %>%
+            ggplot(aes(x=fecha, y=tuits))+
+            geom_line()+
+            theme_light()+
+            labs(title="Tuits por día en 2021")
 ```
 
 ```{r}
@@ -121,7 +171,8 @@ tuits_df %>% mutate(dia = wday(created, label = TRUE)) %>%
 ```
 
 ```{r}
-tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"),"%H")) %>%
+tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"
+                                             ),"%H")) %>%
             group_by(hora) %>%
             summarise(favs=mean(favoriteCount))%>%
             ggplot(aes(x=hora, y=favs))+
@@ -139,5 +190,113 @@ tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"),"%H"),
             geom_point()+
             theme_light()+
             labs(title = "Promedio de favs por hora")
+```
+
+```{r}
+tuits_corpus <- Corpus(VectorSource(tuits_df$text), 
+                        readerControl = list(readPlain, language="sp", load=TRUE))
+```
+
+```{r}
+tuits_corpus <- tm_map(tuits_corpus, content_transformer(tolower))
+tuits_corpus <- tm_map(tuits_corpus, removePunctuation)
+tuits_corpus <- tm_map(tuits_corpus, removeNumbers)
+tuits_corpus <- tm_map(tuits_corpus, removeWords, stopwords("spanish"))
+inspect(tuits_corpus[1:5])
+
+subs <- function(s){
+            s <- sub("¿", "", s)
+            s <- sub("https*", "", s)
+            return(s)
+}
+
+tuits_corpus <- tm_map(tuits_corpus, content_transformer(subs))
+tuits_corpus <- tm_map(tuits_corpus, stripWhitespace)
+inspect(tuits_corpus[1:5])
+```
+
+```{r}
+tuits_dtm <- tokenize_ngrams(sapply(tuits_corpus, as.character), n=1)
+tuits_dtm <- unlist(tuits_dtm)
+tuits_dtm <- data.frame(table(tuits_dtm))
+tuits_dtm <- arrange(tuits_dtm, desc(Freq))
+head(tuits_dtm, 15)
+```
+
+```{r}
+my_stopwords <- c("si", "d")
+tuits_corpus <- tm_map(tuits_corpus, removeWords, my_stopwords)
+tuits_corpus <- tm_map(tuits_corpus, stripWhitespace)
+tuits_dtm <- tokenize_ngrams(sapply(tuits_corpus, as.character), n=1)
+tuits_dtm <- unlist(tuits_dtm)
+tuits_dtm <- data.frame(table(tuits_dtm))
+tuits_dtm <- arrange(tuits_dtm, desc(Freq))
+head(tuits_dtm, 15)
+```
+
+```{r}
+colnames(tuits_dtm) <- c("word", "freq")
+tuits_dtm$word <- as.character(tuits_dtm$word)
+layout(matrix(c(1, 2), nrow=2), heights=c(1, 4))
+par(mar=rep(0, 4))
+plot.new()
+text(x=0.5, y=0.5, "Palabras más frequentes")
+wordcloud(words = tuits_dtm$word, freq = tuits_dtm$freq, 
+          main ="Title", min.freq = 10,max.words = 200, 
+          random.order = F, rot.per = 0.35,
+          colors = brewer.pal(8, "Set1"),
+          scale = c(2.5,0.7))
+```
+
+```{r}
+my_stopwords <- c("si", "d", "diagramadeven", "esteusermurio", "comacurez", "elcancerend",
+                  "jajajaja", "jejeje", "xd", "jajaja", "jeje", "c", "natszendro",
+                  "ay", "fotoenpared", "elizarial", "iamthecat", "patriciagaso", 
+                  "i", "s", "is","of", "jaja","claudifonos")
+tuits_corpus <- tm_map(tuits_corpus, removeWords, my_stopwords)
+tuits_corpus <- tm_map(tuits_corpus, stripWhitespace)
+tuits_dtm <- tokenize_ngrams(sapply(tuits_corpus, as.character), n=1)
+tuits_dtm <- unlist(tuits_dtm)
+tuits_dtm <- data.frame(table(tuits_dtm))
+tuits_dtm <- arrange(tuits_dtm, desc(Freq))
+colnames(tuits_dtm) <- c("word", "freq")
+tuits_dtm$word <- as.character(tuits_dtm$word)
+layout(matrix(c(1, 2), nrow=2), heights=c(1, 4))
+par(mar=rep(0, 4))
+plot.new()
+text(x=0.5, y=0.5, "Palabras más frequentes")
+wordcloud(words = tuits_dtm$word, freq = tuits_dtm$freq, 
+          main ="Title", min.freq = 10,max.words = 200, 
+          random.order = F, rot.per = 0.35,
+          colors = brewer.pal(8, "Set2"),
+          scale = c(2.5,0.7))
+```
+
+```{r}
+tuits_df$texto_limpio <- sapply(tuits_corpus, as.character)
+```
+
+```{r}
+tuits_df$matematicas <- grepl("matemáticas", tuits_df$texto_limpio)
+tuits_df$python <- grepl("python", tuits_df$texto_limpio)
+tuits_df$topologia <- grepl("topología", tuits_df$texto_limpio)
+tuits_df$tesis <- grepl("tesis", tuits_df$texto_limpio)
+tuits_df$crush <- grepl("crush", tuits_df$texto_limpio)
+tuits_df$amor <- grepl("amor", tuits_df$texto_limpio)
+```
+
+```{r}
+print("Estadísticas de los favs en tuits de matemáticas:")
+summary(tuits_df$favoriteCount[tuits_df$matematicas])
+print("Estadísticas de los favs en tuits de python:")
+summary(tuits_df$favoriteCount[tuits_df$python])
+print("Estadísticas de los favs en tuits de toplogía:")
+summary(tuits_df$favoriteCount[tuits_df$topologia])
+print("Estadísticas de los favs en tuits de tesis:")
+summary(tuits_df$favoriteCount[tuits_df$tesis])
+print("Estadísticas de los favs en tuits de crush:")
+summary(tuits_df$favoriteCount[tuits_df$crush])
+print("Estadísticas de los favs en tuits de amor")
+summary(tuits_df$favoriteCount[tuits_df$amor])
 ```
 
