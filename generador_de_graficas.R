@@ -69,9 +69,25 @@ p2 <- tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
 p2 
 dev.off()
 
-png(filename = "./graficas/tuis_favs_por_dia_2021.png", width = 560,
+png(filename = "./graficas/retuits_por_dia_2021.png", width = 560,
     height = 320, units = "px", pointsize = 12, bg="white", res = NA)
-grid.arrange(p1,p2,nrow=2)
+p3 <- tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
+            mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(retuits = sum(retweetCount)) %>%
+            ggplot(aes(x=fecha, y=retuits))+
+            geom_line()+
+            theme_light()+
+            labs(title="Retuirs por día en 2021",
+                 x="",
+                 y="")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
+            ylim(0,30)
+p3
+dev.off()
+
+png(filename = "./graficas/tuis_favs_por_dia_2021.png", width = 560,
+    height = 400, units = "px", pointsize = 12, bg="white", res = NA)
+grid.arrange(p1,p2,p3,nrow=3)
 dev.off()
 
 png(filename = "./graficas/tuis_favs_por_diasemana.png", width = 560,

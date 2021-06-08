@@ -176,10 +176,24 @@ p2 <- tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
             ylim(0,30)
 p2
 ```
+```{r}
+p3 <- tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
+            mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(retuits = sum(retweetCount)) %>%
+            ggplot(aes(x=fecha, y=retuits))+
+            geom_line()+
+            theme_light()+
+            labs(title="Retuirs por día en 2021",
+                 x="",
+                 y="")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
+            ylim(0,30)
+p3
+```
 
 
 ```{r}
-grid.arrange(p1,p2,nrow=2)
+grid.arrange(p1,p2, p3, nrow=3)
 ```
 
 Notemos que hubo cierta tendencia a la alza en el número de tuits y favs durante el mes de mayo que se detuvo a principios de junio.
@@ -325,6 +339,8 @@ tuits_df$amor <- grepl("amor", tuits_df$texto_limpio)
 ```
 
 ```{r}
+print("Estadísdicas generales de mis tuits:")
+summary(tuits_df$favoriteCount)
 print("Estadísticas de los favs en tuits de matemáticas:")
 summary(tuits_df$favoriteCount[tuits_df$matematicas])
 print("Estadísticas de los favs en tuits de python:")
