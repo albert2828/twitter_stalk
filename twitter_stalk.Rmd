@@ -5,8 +5,8 @@ date: "6/7/2021"
 output: html_document
 ---
 
-```{r setup}
-knitr::opts_chunk$set(echo = TRUE, include=FALSE, message = FALSE, warning = FALSE,
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
                       fig.align='center')
 ```
 
@@ -31,20 +31,18 @@ Una vez planteada esta premisa, quedan dos alternativas: pasar un par de horas h
 Para este texto, ocuparé la librería <em>twitterR\em> para descargar datos de mis últimos 1000 tuits publicados. Para poder hacer esto, es necesario tener una cuenta de desarrollador de twitter y crear una API con ella. Esto lo pueden hacer [aquí](https://developer.twitter.com/en), tendrán que llenar algunos datos y después de un día les llegará un correo con la autorización de su cuenta de desarrollador.
 
 ```{r}
-tuits <- userTimeline("bhherto95",n=3200, includeRts = T) 
-tuits <- twListToDF(tuits)
-tuits_df <- tuits %>% filter(!isRetweet) %>%
-            select(text, favoriteCount, replyToSN, id, created, retweetCount)
-tuits_df$created <- with_tz(tuits_df$created, "America/Mexico_City")
+tuits_df <- read.csv("tuits_bhherto95.csv")
+tuits_df <- tuits_df[,-1]
+tuits_df$created <- as_datetime(tuits_df$created)
 ```
 Por alguna razón que no acabo de comprender, si no incluyo los retuits y luego los excluyo del data frame solo puedo descargar 37 tuits
 
+Mi análisis consiste en lo siguiente:
 
 - Distribución de favs y retuits  
 - Serie temporal de favs y retuits  
 - Análisis de las palabras que más tuiteo  
-- Limpieza del corpus
-- Análisis de los tuits con más favs y retuits  
+- Análisis de los favs de algunas de las palabras más usadas
 
 ```{r}
 tuits_df %>% ggplot(aes(x=favoriteCount))+
@@ -61,7 +59,10 @@ summary(tuits_df$favoriteCount)
 table(tuits_df$favoriteCount)
 ```
 
+Todos los datos mayores a 11 son outliers, en especial los dos más grandes y conozco el motivo de que estos hayan tenido tantos favs
+
 ```{r}
+tuits_df[tuits_df$favoriteCount==238,]$text
 tuits_df[tuits_df$favoriteCount==86,]$text
 tuits_df[tuits_df$favoriteCount==48,]$text
 tuits_df[tuits_df$favoriteCount==18,]$text
@@ -82,8 +83,17 @@ summary(tuits_df$retweetCount)
 table(tuits_df$retweetCount)
 ```
 
+
+Eliminamos los dos valores más grandes para la cuenta de favoritos y la distribución se ve de esta forma:
 ```{r}
 tuits_df <- tuits_df %>% filter(favoriteCount<20)
+
+tuits_df %>% ggplot(aes(x=favoriteCount))+
+            geom_histogram(binwidth = 1, color="black")+
+            theme_light()+
+            labs(title="Distribución de favs en tuits",
+                 x="Número de Favs",
+                 y="")
 ```
 
 
@@ -98,8 +108,10 @@ tuits_df %>% mutate(fecha=as.Date(created)) %>%
                  y="")+
             scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
             theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 ```
 
+Notemos que hay un pico muy grande en el número de tuits que publiqué al rededor de finales de marzo y principios de abril del 2020
 ```{r}
 tuits_df %>% mutate(fecha=as.Date(created)) %>%
             filter(fecha >= as.Date("2020-03-01") & fecha <= as.Date("2020-05-01"))%>%
@@ -114,6 +126,7 @@ tuits_df %>% mutate(fecha=as.Date(created)) %>%
             theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+Estos corresponden de hecho a una dinámica que organizó un amigo el 30 de marzo.
 ```{r}
 tuits_df %>% mutate(fecha=as.Date(created)) %>%
             filter(fecha== as.Date("2020-03-30") ) %>%
@@ -127,29 +140,51 @@ tuits_df %>% mutate(fecha=as.Date(created)) %>%
             ggplot(aes(x=fecha, y=favs))+
             geom_line()+
             theme_light()+
-            labs(title = "Evolución del número de favs por día")
+            labs(title = "Evolución del número de favs por día")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-```{r}
-tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
-            mutate(fecha=as.Date(created)) %>% 
-            group_by(fecha) %>% summarise(favs = sum(favoriteCount)) %>%
-            ggplot(aes(x=fecha, y=favs))+
-            geom_line()+
-            theme_light()+
-            labs(title="Evolución del número de favs por día en 2021")
-```
+Notemos que hay un pico en el conteo de favoritos de ese día, que corresponden al mismo evento. Nos concentramos solo en los tuits de este año
 
 ```{r}
-tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
+p1 <- tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
             mutate(fecha=as.Date(created)) %>% 
             group_by(fecha) %>% summarise(tuits = n()) %>%
             ggplot(aes(x=fecha, y=tuits))+
             geom_line()+
             theme_light()+
-            labs(title="Tuits por día en 2021")
+            labs(title="Tuits por día en 2021",
+                 x="",
+                 y="")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
+            ylim(0,30)
+p1
 ```
 
+```{r}
+p2 <- tuits_df %>% filter(created>=as.Date("2021-01-01")) %>%
+            mutate(fecha=as.Date(created)) %>% 
+            group_by(fecha) %>% summarise(favs = sum(favoriteCount)) %>%
+            ggplot(aes(x=fecha, y=favs))+
+            geom_line()+
+            theme_light()+
+            labs(title="Favs por día en 2021",
+                 x="",
+                 y="")+
+            scale_x_date(date_labels = "%Y %b %d", date_breaks = "1 month")+
+            ylim(0,30)
+p2
+```
+
+
+```{r}
+grid.arrange(p1,p2,nrow=2)
+```
+
+Notemos que hubo cierta tendencia a la alza en el número de tuits y favs durante el mes de mayo que se detuvo a principios de junio.
+
+Ahora estoy interesado en averiguar en qué días, en promedio, obtengo más favs
 ```{r}
 tuits_df %>% mutate(dia = wday(created, label = TRUE)) %>%
             group_by(dia) %>% 
@@ -158,6 +193,7 @@ tuits_df %>% mutate(dia = wday(created, label = TRUE)) %>%
             geom_bar(stat = "identity")+
             theme_light()+
             labs(title = "Favs por día de la semana ")
+
 ```
 
 ```{r}
@@ -169,7 +205,7 @@ tuits_df %>% mutate(dia = wday(created, label = TRUE)) %>%
             theme_light()+
             labs(title = "Promedio de favs por día de la semana ")
 ```
-
+Este mismo análisis se puede hacer por hora del día
 ```{r}
 tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"
                                              ),"%H")) %>%
@@ -183,7 +219,7 @@ tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"
 
 ```{r}
 tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"),"%H"),
-                    dia_sem = wday(created, label = T)) %>%
+                          dia_sem = wday(created, label = T)) %>%
             group_by(hora, dia_sem) %>%
             summarise(favs=mean(favoriteCount))%>%
             ggplot(aes(x=hora, y=favs, color=dia_sem))+
@@ -191,7 +227,7 @@ tuits_df %>% mutate(hora = format(as.POSIXct(created,format="%H:%M:%S"),"%H"),
             theme_light()+
             labs(title = "Promedio de favs por hora")
 ```
-
+¿De qué es lo que hablo más en mi Twitter?
 ```{r}
 tuits_corpus <- Corpus(VectorSource(tuits_df$text), 
                         readerControl = list(readPlain, language="sp", load=TRUE))
@@ -252,7 +288,8 @@ wordcloud(words = tuits_dtm$word, freq = tuits_dtm$freq,
 my_stopwords <- c("si", "d", "diagramadeven", "esteusermurio", "comacurez", "elcancerend",
                   "jajajaja", "jejeje", "xd", "jajaja", "jeje", "c", "natszendro",
                   "ay", "fotoenpared", "elizarial", "iamthecat", "patriciagaso", 
-                  "i", "s", "is","of", "jaja","claudifonos")
+                  "i", "s", "is","of", "jaja","claudifonos", "eldelonceonce", 
+                  "uf", "ufa", "pedo")
 tuits_corpus <- tm_map(tuits_corpus, removeWords, my_stopwords)
 tuits_corpus <- tm_map(tuits_corpus, stripWhitespace)
 tuits_dtm <- tokenize_ngrams(sapply(tuits_corpus, as.character), n=1)
@@ -261,6 +298,7 @@ tuits_dtm <- data.frame(table(tuits_dtm))
 tuits_dtm <- arrange(tuits_dtm, desc(Freq))
 colnames(tuits_dtm) <- c("word", "freq")
 tuits_dtm$word <- as.character(tuits_dtm$word)
+
 layout(matrix(c(1, 2), nrow=2), heights=c(1, 4))
 par(mar=rep(0, 4))
 plot.new()
@@ -276,6 +314,7 @@ wordcloud(words = tuits_dtm$word, freq = tuits_dtm$freq,
 tuits_df$texto_limpio <- sapply(tuits_corpus, as.character)
 ```
 
+Finalmente, estoy interesado en saber el impacto de ciertos temas en el propedio de favs que recubo.
 ```{r}
 tuits_df$matematicas <- grepl("matemáticas", tuits_df$texto_limpio)
 tuits_df$python <- grepl("python", tuits_df$texto_limpio)
